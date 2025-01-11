@@ -1,6 +1,6 @@
 import streamlit as st
 import json
-import faiss
+import faiss-cpu
 import numpy as np
 from sentence_transformers import SentenceTransformer
 from transformers import T5ForConditionalGeneration, T5Tokenizer
