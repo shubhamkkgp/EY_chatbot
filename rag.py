@@ -1,9 +1,9 @@
 import streamlit as st
 import json
-import faiss-cpu
 import numpy as np
 from sentence_transformers import SentenceTransformer
 from transformers import T5ForConditionalGeneration, T5Tokenizer
+from sklearn.neighbors import NearestNeighbors  # Use scikit-learn instead of FAISS
 
 # Load the knowledge base JSON file
 def load_knowledge_base(file_path):
@@ -24,19 +24,17 @@ def prepare_data(knowledge_base):
             })
     return texts, metadata
 
-# Generate embeddings and build FAISS index
-def create_faiss_index(texts, embedding_model):
+# Generate embeddings and build scikit-learn index
+def create_sklearn_index(texts, embedding_model):
     embeddings = embedding_model.encode(texts, convert_to_numpy=True)
-    dimension = embeddings.shape[1]                        # Embedding dimension
-    index = faiss.IndexFlatL2(dimension)
-    index.add(embeddings)                                  # Add embeddings to the index
-    print(f"FAISS index created with {len(embeddings)} entries.")
-    return index
+    index = NearestNeighbors(n_neighbors=3, metric="euclidean")
+    index.fit(embeddings)  # Fit embeddings
+    return index, embeddings
 
 # Retrieve relevant chunks
-def retrieve(query, embedding_model, index, texts, metadata, top_k=3):
+def retrieve(query, embedding_model, index, embeddings, texts, metadata, top_k=3):
     query_embedding = embedding_model.encode([query], convert_to_numpy=True)
-    distances, indices = index.search(query_embedding, top_k)
+    distances, indices = index.kneighbors(query_embedding, n_neighbors=top_k)
     results = [
         {
             "text": texts[i],
@@ -67,7 +65,7 @@ knowledge_base = load_knowledge_base(file_path)
 texts, metadata = prepare_data(knowledge_base)
 
 embedding_model = SentenceTransformer('all-MiniLM-L6-v2')  # Lightweight embedding model
-faiss_index = create_faiss_index(texts, embedding_model)
+sklearn_index, embeddings = create_sklearn_index(texts, embedding_model)
 
 generator_model = T5ForConditionalGeneration.from_pretrained("t5-small")
 tokenizer = T5Tokenizer.from_pretrained("t5-small")
@@ -76,7 +74,7 @@ query = st.text_input("Query", "")
 
 if query:
     with st.spinner("Retrieving and generating response..."):
-        retrieved_results = retrieve(query, embedding_model, faiss_index, texts, metadata, top_k=3)
+        retrieved_results = retrieve(query, embedding_model, sklearn_index, embeddings, texts, metadata, top_k=3)
 
         st.subheader("Retrieved Results")
         for result in retrieved_results:
